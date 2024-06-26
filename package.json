@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@virustotal/vt-augment": "^1.7.3",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5"
+  }
+}
