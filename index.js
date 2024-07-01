@@ -6,60 +6,85 @@ const baseUrl = "https://www.virustotal.com/api/v3";
 
 // List of URLs to scan
 const urlsToScan = [
-//   "http://houkadaigakuin.com/css/webmail.konsoleh.co.za/emailSignIn_accountCUST_ID/konsoleh.sign_in/email.user/webmail.konsoleh.login.htm",
-//   "http://muftizainulabideen.com/wp-admin/be/StandardV2/zyjviy2q=/",
-//   "http://pilatesboutique.com.au/css/commlog/",
-  "https://bit.ly/45JqCvI"
+  "https://bit.ly/45JqCvI",
+  "https://kyc-bltflyer.web.app/"
 ];
+
+const rateLimit = 4; // 4 lookups per minute
+const delayBetweenRequests = 60000 / rateLimit; // Delay between requests in milliseconds
 
 // Function to scan a URL
 async function scanUrl(url) {
-  try {
-    const response = await axios.post(`${baseUrl}/urls`, new URLSearchParams({ url }), {
-      headers: {
-        "x-apikey": apiKey,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    });
+  let retries = 3; // Number of retries for each request
 
-    const analysisId = response.data.data.id;
-    console.log("URL Scan ID:", analysisId);
-    return analysisId;
-  } catch (error) {
-    console.error("Error scanning URL:", error);
-    return null;
+  while (retries > 0) {
+    try {
+      const response = await axios.post(`${baseUrl}/urls`, new URLSearchParams({ url }), {
+        headers: {
+          "x-apikey": apiKey,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        timeout: 10000 // 10 seconds timeout
+      });
+
+      const analysisId = response.data.data.id;
+      console.log("URL Scan ID:", analysisId);
+      return analysisId;
+    } catch (error) {
+      if (error.code === 'ECONNABORTED') {
+        console.error("Request timed out, retrying...");
+      } else {
+        console.error("Error scanning URL:", error.message);
+        return null;
+      }
+      retries -= 1;
+      await new Promise(resolve => setTimeout(resolve, delayBetweenRequests)); // Wait before retrying
+    }
   }
+
+  return null;
 }
 
 // Function to get the scan report
 async function getScanReport(analysisId) {
-  try {
-    const response = await axios.get(`${baseUrl}/analyses/${analysisId}`, {
-      headers: {
-        "x-apikey": apiKey,
-      },
-    });
+  let retries = 3; // Number of retries for each request
 
-    const report = response.data.data.attributes;
-    //console.log('Scan Report:', report);
+  while (retries > 0) {
+    try {
+      const response = await axios.get(`${baseUrl}/analyses/${analysisId}`, {
+        headers: {
+          "x-apikey": apiKey,
+        },
+        timeout: 10000 // 10 seconds timeout
+      });
 
-    // Analyze the scan report
-    const maliciousCount = report.stats.malicious;
-    const suspiciousCount = report.stats.suspicious;
-    const harmlessCount = report.stats.harmless;
-    const undetectedCount = report.stats.undetected;
+      const report = response.data.data.attributes;
 
-    console.log(`Malicious: ${maliciousCount}, Suspicious: ${suspiciousCount}, Harmless: ${harmlessCount}, Undetected: ${undetectedCount}`);
+      // Analyze the scan report
+      const maliciousCount = report.stats.malicious;
+      const suspiciousCount = report.stats.suspicious;
+      const harmlessCount = report.stats.harmless;
+      const undetectedCount = report.stats.undetected;
 
-    if (maliciousCount > 0) {
-      console.log("The URL is malicious.");
-    } else if (suspiciousCount > 0) {
-      console.log("The URL is suspicious.");
-    } else {
-      console.log("The URL is good.");
+      console.log(`Malicious: ${maliciousCount}, Suspicious: ${suspiciousCount}, Harmless: ${harmlessCount}, Undetected: ${undetectedCount}`);
+
+      if (maliciousCount > 0) {
+        console.log("The URL is malicious.");
+      } else if (suspiciousCount > 0) {
+        console.log("The URL is suspicious.");
+      } else {
+        console.log("The URL is good.");
+      }
+      return;
+    } catch (error) {
+      if (error.code === 'ECONNABORTED') {
+        console.error("Request timed out, retrying...");
+      } else {
+        console.error("Error retrieving scan report:", error.message);
+      }
+      retries -= 1;
+      await new Promise(resolve => setTimeout(resolve, delayBetweenRequests)); // Wait before retrying
     }
-  } catch (error) {
-    console.error("Error retrieving scan report:", error);
   }
 }
 
@@ -69,7 +94,9 @@ async function main() {
     console.log(`Scanning URL: ${url}`);
     const analysisId = await scanUrl(url);
     if (analysisId) {
+      await new Promise(resolve => setTimeout(resolve, delayBetweenRequests)); // Wait to respect rate limit
       await getScanReport(analysisId);
+      await new Promise(resolve => setTimeout(resolve, delayBetweenRequests)); // Wait to respect rate limit
     }
   }
 }
